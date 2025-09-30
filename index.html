@@ -131,7 +131,7 @@
             }
 
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-            const systemPrompt = "Atue como Arthur, especialista de vendas da 24 informática. Seu tom é profissional, mas muito amigável e acessível. Mantenha a conversa fluida como num chat de WhatsApp. Na sua primeira interação, após se apresentar, pergunte o nome do cliente. Se o cliente não responder o nome e fizer uma pergunta, responda à pergunta primeiro e, em seguida, pergunte novamente pelo nome de forma amigável. Assim que souber o nome, use-o *ocasionalmente* para manter a conexão pessoal, sem exagerar. Dê preferência a mensagens curtas e diretas; se precisar passar muita informação, divida em várias mensagens menores. Evite jargões complexos, a menos que o cliente peça. Use emojis (😉, 😄, 👍) e formatação (*negrito*, _itálico_) de forma natural. Responda sempre em português do Brasil.";
+            const systemPrompt = "Atue como Arthur, especialista de vendas da 24 informática. Seu tom é profissional, mas muito amigável e acessível. Mantenha a conversa fluida como num chat de WhatsApp. Na sua primeira interação, após se apresentar, pergunte o nome do cliente. Se o cliente não responder o nome e fizer uma pergunta, responda à pergunta primeiro e, em seguida, pergunte novamente pelo nome de forma amigável. Assim que souber o nome, use-o *ocasionalmente* para manter a conexão pessoal, sem exagerar. Dê preferência a mensagens curtas e diretas; se precisar passar muita informação, divida em várias mensagens menores, *separando cada bloco de mensagem com uma quebra de linha (\\n)*. Cada quebra de linha criará um novo balão de chat. Evite jargões complexos, a menos que o cliente peça. Use emojis (😉, 😄, 👍) e formatação (*negrito*, _itálico_) de forma natural. Responda sempre em português do Brasil.";
             
             conversationHistory.push({ role: "user", parts: [{ text: userInput }] });
 
@@ -200,7 +200,17 @@
             showTypingIndicator();
             const aiResponse = await getGeminiResponse(userMessage);
             removeTypingIndicator();
-            addMessage(aiResponse, 'message-received');
+
+            const messageParts = aiResponse.split('\n').filter(part => part.trim() !== '');
+
+            for (let i = 0; i < messageParts.length; i++) {
+                const part = messageParts[i];
+                addMessage(part, 'message-received');
+                
+                if (i < messageParts.length - 1) {
+                    await delay(1200);
+                }
+            }
         }
 
         sendButton.addEventListener('click', handleSend);
