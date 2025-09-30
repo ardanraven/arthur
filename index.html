@@ -30,6 +30,18 @@
             width: 0px;
             background: transparent; /* make scrollbar transparent */
         }
+        /* Animação para o indicador de "digitando" */
+        @keyframes bounce {
+            0%, 100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-6px);
+            }
+        }
+        .dot {
+            animation: bounce 1.2s infinite ease-in-out;
+        }
     </style>
 </head>
 <body class="bg-gray-200 flex items-center justify-center h-screen">
@@ -97,18 +109,19 @@
         function showTypingIndicator() {
             const typingDiv = document.createElement('div');
             typingDiv.id = 'typing-indicator';
-            typingDiv.className = 'max-w-xs p-3 rounded-lg shadow message-received';
-            typingDiv.innerHTML = '<span class="animate-pulse">digitando...</span>';
+            typingDiv.className = 'max-w-xs p-3 rounded-lg shadow message-received flex items-center space-x-1';
+            typingDiv.innerHTML = '<span class="block w-2 h-2 bg-gray-400 rounded-full dot" style="animation-delay: 0s;"></span><span class="block w-2 h-2 bg-gray-400 rounded-full dot" style="animation-delay: 0.2s;"></span><span class="block w-2 h-2 bg-gray-400 rounded-full dot" style="animation-delay: 0.4s;"></span>';
             chatBody.appendChild(typingDiv);
             chatBody.scrollTop = chatBody.scrollHeight;
         }
 
         function removeTypingIndicator() {
             const indicator = document.getElementById('typing-indicator');
-            if (indicator) indicator.remove();
+            if (indicator) {
+                indicator.remove();
+            }
         }
 
-        // Helper para delay exponencial
         const delay = ms => new Promise(res => setTimeout(res, ms));
 
         async function getGeminiResponse(userInput) {
@@ -118,14 +131,14 @@
             }
 
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-            const systemPrompt = "Atue como Arthur, um especialista em tecnologia e o 'parceiro gente boa' de uma loja de informática. Seu tom é profissional, mas muito amigável e acessível. Mantenha a conversa fluida como num chat de WhatsApp. Na sua primeira interação, após a saudação, pergunte o nome do cliente. Assim que souber o nome, use-o frequentemente para criar uma conexão pessoal e íntima. Evite textos longos ou jargões complexos, a menos que o cliente peça. Use emojis (😉, 😄, 👍) e formatação (*negrito*, _itálico_) de forma natural. Responda sempre em português do Brasil.";
+            const systemPrompt = "Atue como Arthur, especialista de vendas da 24 informática. Seu tom é profissional, mas muito amigável e acessível. Mantenha a conversa fluida como num chat de WhatsApp. Na sua primeira interação, após se apresentar, pergunte o nome do cliente. Se o cliente não responder o nome e fizer uma pergunta, responda à pergunta primeiro e, em seguida, pergunte novamente pelo nome de forma amigável. Assim que souber o nome, use-o *ocasionalmente* para manter a conexão pessoal, sem exagerar. Dê preferência a mensagens curtas e diretas; se precisar passar muita informação, divida em várias mensagens menores. Evite jargões complexos, a menos que o cliente peça. Use emojis (😉, 😄, 👍) e formatação (*negrito*, _itálico_) de forma natural. Responda sempre em português do Brasil.";
             
             conversationHistory.push({ role: "user", parts: [{ text: userInput }] });
 
             const payload = {
                 contents: conversationHistory,
                 systemInstruction: { parts: [{ text: systemPrompt }] },
-                generationConfig: { temperature: 0.7, topK: 1, topP: 1, maxOutputTokens: 2048 },
+                generationConfig: { temperature: 0.7, topK: 1, topP: 1, maxOutputTokens: 2048 }
             };
 
             const maxRetries = 3;
@@ -154,7 +167,6 @@
                              return `O serviço parece estar sobrecarregado (${response.status}). Já tentei algumas vezes. Por favor, tente novamente mais tarde.`;
                         }
                         const waitTime = Math.pow(2, attempt + 1) * 1000;
-                        console.log(`API Error ${response.status}. Retrying in ${waitTime / 1000}s...`);
                         await delay(waitTime);
                     } else {
                         const errorBody = await response.json();
@@ -171,7 +183,6 @@
                         return "Estou com dificuldades para me conectar. Verifique sua conexão e tente novamente.";
                     }
                      const waitTime = Math.pow(2, attempt + 1) * 1000;
-                     console.log(`Fetch Error. Retrying in ${waitTime / 1000}s...`);
                      await delay(waitTime);
                 }
             }
@@ -202,7 +213,7 @@
 
         window.onload = () => {
              setTimeout(() => {
-                const initialMessage = "Olá! Aqui é o Arthur, seu assistente virtual. Estou pronto para te ajudar a encontrar o que precisa. 😄";
+                const initialMessage = "Olá! Aqui é o Arthur, especialista de vendas da 24 informática. Para começarmos, pode me dizer o seu nome? 😄";
                 addMessage(initialMessage, 'message-received');
             }, 1000);
         };
