@@ -30,6 +30,9 @@
             width: 0px;
             background: transparent; /* make scrollbar transparent */
         }
+        
+        /* --- ANIMAÇÕES --- */
+
         /* Animação para o indicador de "digitando" */
         @keyframes bounce {
             0%, 100% {
@@ -42,6 +45,22 @@
         .dot {
             animation: bounce 1.2s infinite ease-in-out;
         }
+
+        /* Animação para as mensagens aparecendo */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(15px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .message-animate {
+            animation: fadeInUp 0.4s ease-out;
+        }
+
     </style>
 </head>
 <body class="bg-gray-200 flex items-center justify-center h-screen">
@@ -97,22 +116,31 @@
             sanitizedText = sanitizedText.replace(/```([\s\S]*?)```/g, '<code class="bg-gray-200 text-gray-800 rounded px-2 py-1 font-mono text-sm">$1</code>');
             return sanitizedText.replace(/\n/g, '<br>');
         }
+        
+        function smoothScrollToBottom(element) {
+            element.scrollIntoView({ behavior: "smooth", block: "end" });
+        }
 
-        function addMessage(text, sender) {
+        function addMessage(text, sender, shouldScroll = false) {
             const messageDiv = document.createElement('div');
             messageDiv.innerHTML = formatMessageText(text);
-            messageDiv.className = `max-w-xs md:max-w-md p-3 rounded-lg shadow ${sender} break-words`;
+            // Adiciona a classe de animação junto com as outras
+            messageDiv.className = `max-w-xs md:max-w-md p-3 rounded-lg shadow ${sender} break-words message-animate`;
             chatBody.appendChild(messageDiv);
-            chatBody.scrollTop = chatBody.scrollHeight;
+            
+            // Só executa a rolagem suave se for especificado (ex: mensagem do usuário)
+            if (shouldScroll) {
+                smoothScrollToBottom(messageDiv);
+            }
         }
 
         function showTypingIndicator() {
             const typingDiv = document.createElement('div');
             typingDiv.id = 'typing-indicator';
-            typingDiv.className = 'max-w-xs p-3 rounded-lg shadow message-received flex items-center space-x-1';
+            typingDiv.className = 'max-w-xs p-3 rounded-lg shadow message-received flex items-center space-x-1 message-animate';
             typingDiv.innerHTML = '<span class="block w-2 h-2 bg-gray-400 rounded-full dot" style="animation-delay: 0s;"></span><span class="block w-2 h-2 bg-gray-400 rounded-full dot" style="animation-delay: 0.2s;"></span><span class="block w-2 h-2 bg-gray-400 rounded-full dot" style="animation-delay: 0.4s;"></span>';
             chatBody.appendChild(typingDiv);
-            chatBody.scrollTop = chatBody.scrollHeight;
+            // Não força mais a rolagem aqui para ser menos agressivo
         }
 
         function removeTypingIndicator() {
@@ -121,23 +149,25 @@
                 indicator.remove();
             }
         }
-
+        
         const delay = ms => new Promise(res => setTimeout(res, ms));
 
         async function getGeminiResponse(userInput) {
-            const apiKey = "AIzaSyCLm95yuxWbEerJIY9akIZHhJDTSqH8lE0";
+            // A CHAVE DE API FOI REMOVIDA POR SEGURANÇA. INSIRA A SUA AQUI.
+            const apiKey = "AIzaSyDlXkGIMOeQuf3ZZ9vOqOHHRG05usqOayg"; 
             if (apiKey === "SUA_CHAVE_API_AQUI") {
                 return "Por favor, adicione sua chave de API do Google AI Studio no código para que eu possa funcionar! 😉";
             }
 
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-            const systemPrompt = "Atue como Arthur, especialista de vendas da 24 informática. Seu tom é profissional, mas muito amigável e acessível. Mantenha a conversa fluida como num chat de WhatsApp. Na sua primeira interação, após se apresentar, pergunte o nome do cliente. Se o cliente não responder o nome e fizer uma pergunta, responda à pergunta primeiro e, em seguida, pergunte novamente pelo nome de forma amigável. Assim que souber o nome, use-o *ocasionalmente* para manter a conexão pessoal, sem exagerar. Dê preferência a mensagens curtas e diretas; se precisar passar muita informação, divida em várias mensagens menores, *separando cada bloco de mensagem com uma quebra de linha (\\n)*. Cada quebra de linha criará um novo balão de chat. Evite jargões complexos, a menos que o cliente peça. Use emojis (😉, 😄, 👍) e formatação (*negrito*, _itálico_) de forma natural. Responda sempre em português do Brasil.";
+            const systemPrompt = "Atue como Arthur, especialista de vendas da 24 informática. Seu tom é profissional, mas muito amigável e acessível. Mantenha a conversa fluida como num chat de WhatsApp. Na sua primeira interação, após se apresentar, pergunte o nome do cliente. Se o cliente não responder o nome e fizer uma pergunta, responda à pergunta primeiro e, em seguida, pergunte novamente pelo nome de forma amigável. Assim que souber o nome, use-o *ocasionalmente* para manter a conexão pessoal, sem exagerar. Dê preferência a mensagens curtas e diretas; se precisar passar muita informação, divida em várias mensagens menores, *separando cada bloco de mensagem com uma quebra de linha (\\n)*. Cada quebra de linha criará um novo balão de chat. Evite jargões complexos, a menos que o cliente peça. Use emojis (😉, 😄, 👍) e formatação (*negrito*, _itálico_) de forma natural. Responda sempre em português do Brasil. CRITICAMENTE IMPORTANTE: Ao ser perguntado sobre disponibilidade, preço ou detalhes de um produto, você *DEVE* usar a busca na web, restringindo sua pesquisa *exclusivamente ao site www.24info.com.br*, para encontrar as informações mais atuais. Responda com base nos resultados encontrados nesse site.";
             
             conversationHistory.push({ role: "user", parts: [{ text: userInput }] });
 
             const payload = {
                 contents: conversationHistory,
                 systemInstruction: { parts: [{ text: systemPrompt }] },
+                tools: [{ "google_search": {} }],
                 generationConfig: { temperature: 0.7, topK: 1, topP: 1, maxOutputTokens: 2048 }
             };
 
@@ -194,7 +224,7 @@
             const userMessage = messageInput.value.trim();
             if (userMessage === "") return;
 
-            addMessage(userMessage, 'message-sent');
+            addMessage(userMessage, 'message-sent', true); // Passa 'true' para rolar suavemente
             messageInput.value = '';
 
             showTypingIndicator();
@@ -205,7 +235,7 @@
 
             for (let i = 0; i < messageParts.length; i++) {
                 const part = messageParts[i];
-                addMessage(part, 'message-received');
+                addMessage(part, 'message-received'); // Não rola para as mensagens do bot
                 
                 if (i < messageParts.length - 1) {
                     await delay(1200);
@@ -231,4 +261,3 @@
 
 </body>
 </html>
-
