@@ -130,17 +130,14 @@
                                    .filter(word => !stopWords.includes(word) && word.trim().length > 1);
 
             if (searchKeywords.length === 0) {
-                // Se a busca for apenas uma saudação, não busca nada
                 if (/^(oi|ola|opa|tudo bem|bom dia|boa tarde|boa noite)/.test(userInput.toLowerCase())) {
                     return [];
                 }
-                // Senão, usa a palavra original se for curta.
                 const originalWords = userInput.toLowerCase().split(' ');
                 if (originalWords.length > 0) return originalWords;
             }
             
             const productsRef = collection(db, "products");
-            // Adiciona a busca por 'webcam' se o usuário mencionar 'camera' e 'pc'/'computador'
             if ((searchKeywords.includes('camera') || searchKeywords.includes('cam')) && (searchKeywords.includes('pc') || searchKeywords.includes('computador'))) {
                 searchKeywords.push('webcam');
             }
@@ -202,7 +199,9 @@
 **REGRAS GERAIS:**
 * Sua única fonte de produtos é o Firebase. Não invente.
 * Use a memória da conversa para entender perguntas de refinamento.
-* Ao apresentar o produto, remova o código de 6 dígitos do início do nome e use-o no campo (Cód: ...).`;
+* Ao apresentar o produto, remova o código de 6 dígitos do início do nome e use-o no campo (Cód: ...).
+No final da venda você coleta os dados do cliente, nome completo, cpf, telefone e cep com numero da casa, e anota o código do produto vendido.
+Agradeca o cliente pela compra e diga que irá chamar um atendente humano para finalizar o pagamento e o envio.`;
 
             let context = "Contexto da busca no Firebase:\n";
             if (products.length > 0) {
@@ -225,23 +224,48 @@
                 generationConfig: { temperature: 0.6 }
             };
 
-            try {
-                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                if (!response.ok) throw new Error(`API Error: ${response.status}`);
-                const result = await response.json();
-                const candidate = result.candidates?.[0];
-                if (candidate && candidate.content?.parts?.[0]?.text) {
-                    const aiText = candidate.content.parts[0].text;
-                    conversationHistory.push({ role: "user", parts: [{ text: userInput }] });
-                    conversationHistory.push({ role: "model", parts: [{ text: aiText }] });
-                    return aiText;
-                } else {
-                    throw new Error("Resposta da API inválida.");
+            const maxRetries = 3;
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                try {
+                    const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+
+                    // Se a resposta for 503 ou 429, tenta novamente após um tempo
+                    if ([503, 429].includes(response.status)) {
+                        if (attempt + 1 === maxRetries) {
+                            return `O serviço parece estar sobrecarregado (${response.status}). Por favor, tente novamente mais tarde.`;
+                        }
+                        const waitTime = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s
+                        await delay(waitTime);
+                        continue; // Próxima tentativa
+                    }
+                    
+                    if (!response.ok) {
+                         const errorBody = await response.json();
+                        console.error("API Error:", response.status, errorBody);
+                        throw new Error(`API Error: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    const candidate = result.candidates?.[0];
+                    if (candidate && candidate.content?.parts?.[0]?.text) {
+                        const aiText = candidate.content.parts[0].text;
+                        conversationHistory.push({ role: "user", parts: [{ text: userInput }] });
+                        conversationHistory.push({ role: "model", parts: [{ text: aiText }] });
+                        return aiText;
+                    } else {
+                        throw new Error("Resposta da API inválida.");
+                    }
+                } catch (error) {
+                    console.error(`Erro na chamada da API Gemini (tentativa ${attempt + 1}):`, error);
+                    if (attempt + 1 === maxRetries) {
+                         return "Opa, estou com um probleminha para me comunicar. Tente novamente em instantes.";
+                    }
+                    // Espera antes de tentar novamente em caso de erro de rede
+                    const waitTime = Math.pow(2, attempt + 1) * 1000;
+                    await delay(waitTime);
                 }
-            } catch (error) {
-                console.error("Erro na chamada da API Gemini:", error);
-                return "Opa, estou com um probleminha para me comunicar. Tente novamente em instantes.";
             }
+            return "Não foi possível obter uma resposta após várias tentativas.";
         }
 
         async function handleSend() {
