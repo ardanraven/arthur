@@ -124,23 +124,16 @@
 
         // --- FUNÇÃO DE BUSCA NO FIREBASE (MELHORADA) ---
         async function searchProducts(searchTerm) {
-            // Lista de palavras comuns (stop words) para serem ignoradas na busca, focando nos termos importantes.
             const stopWords = ['a', 'o', 'e', 'ou', 'de', 'do', 'da', 'dos', 'das', 'em', 'no', 'na', 'nos', 'nas', 'um', 'uma', 'com', 'por', 'para', 'pra', 'q', 'que', 'eu', 'meu', 'minha'];
-            
-            // 1. Converte o termo para minúsculas.
-            // 2. Remove pontuações para limpar a busca.
-            // 3. Divide a frase em palavras.
-            // 4. Filtra as palavras, removendo as stop words e palavras muito curtas (como letras únicas).
             const searchKeywords = searchTerm.toLowerCase()
                                    .replace(/[^\w\s]/gi, '') 
                                    .split(' ')
                                    .filter(word => !stopWords.includes(word) && word.trim().length > 1);
 
-            // Se, após a filtragem, não sobrar nenhuma palavra-chave, retorna uma lista vazia para evitar buscas inúteis.
             if (searchKeywords.length === 0) return [];
             
             const productsRef = collection(db, "products");
-            const q = query(productsRef, where("keywords", "array-contains-any", searchKeywords), limit(5));
+            const q = query(productsRef, where("keywords", "array-contains-any", searchKeywords), limit(10));
             
             try {
                 const querySnapshot = await getDocs(q);
@@ -161,29 +154,41 @@
 
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
             
-            const systemPrompt = `Você é Arthur, um especialista de vendas da 24 informática. Sua personalidade é amigável, prestativa e consultiva. Seu objetivo é ajudar o cliente a encontrar o que ele precisa, usando **exclusivamente** as informações do banco de dados fornecido.
+            const systemPrompt = `Você é Arthur, um especialista de vendas da 24 informática. Sua personalidade é amigável e extremamente proativa na resolução de problemas. Seu objetivo é entender a **necessidade real** do cliente e encontrar o produto correspondente no banco de dados.
 
-**REGRAS INVIOLÁVEIS DE OPERAÇÃO:**
+**ESTRUTURA DE PENSAMENTO OBRIGATÓRIA:**
 
-1.  **FONTE ÚNICA E EXCLUSIVA:** Toda a sua informação sobre produtos, nomes, códigos e preços DEVE vir do "Contexto da busca no Firebase". É terminantemente proibido usar conhecimento externo, da internet, ou inventar produtos.
+1.  **Analisar a Intenção (O Problema do Cliente):** Qual é o problema que o cliente está tentando resolver? O que ele quer **fazer**? Ignore as palavras exatas e foque na funcionalidade.
+    * Cliente diz: "queria uma camera pro meu computador". A intenção é "fazer videochamadas ou gravar vídeos usando o PC".
+    * Cliente diz: "algo pra ligar o usb no celular". A intenção é "conectar um dispositivo USB em um celular".
+    * Cliente diz: "saca rolhas eletronico". A intenção é "abrir garrafa de vinho de forma automática".
 
-2.  **INTERPRETAÇÃO INTELIGENTE:** Entenda a intenção do cliente. Se ele pedir um "saca rolhas eletrônico", você deve ser capaz de associar isso a um "abridor de vinho elétrico" se for o que está no contexto.
+2.  **Traduzir a Necessidade em Categoria de Produto:** Com base na intenção, qual é a **categoria de produto** que resolve esse problema? Use seu conhecimento para fazer essa ponte.
+    * Intenção "fazer videochamadas no PC" se traduz na categoria de produto **"webcam"**.
+    * Intenção "conectar USB no celular" se traduz em **"Adaptador OTG"**.
+    * Intenção "abrir vinho automaticamente" se traduz em **"Abridor de vinho elétrico"**.
 
-3.  **FLUXO DE CONVERSA EM MÚLTIPLAS ETAPAS:**
-    * **ETAPA 1: BUSCA INICIAL**
-        * Quando o cliente perguntar sobre um produto, sua primeira resposta DEVE ser para confirmar se o encontrou no estoque.
-        * **Se encontrar:** Responda de forma amigável. O "Nome do Produto" que você recebe no contexto começa com o código de 6 dígitos. Na sua resposta, você DEVE remover esses 6 dígitos iniciais e o espaço seguinte do nome. O formato exato da resposta deve ser: "Com certeza! Encontrei o que você procura. Temos o *[Nome do Produto SEM o código inicial]* (Cód: [Código]), que sai por *R$ [Preço Normal]*. Quer que eu fale um pouco mais sobre ele ou te ajude com outra coisa?".
-        * **Se NÃO encontrar:** Aja como um vendedor humano e prestativo. Reconheça que não encontrou o item exato, mas tente ajudar de outra forma. Ofereça-se para procurar por algo similar ou pergunte ao cliente qual a finalidade do produto para que você possa sugerir uma alternativa. **Exemplo de resposta:** "Olha, um '[termo buscado]' com esse nome exato eu não localizei aqui no nosso estoque. Mas me diz uma coisa, qual era a sua ideia? Onde você pretendia usar? Às vezes temos algum outro tipo de suporte ou adaptador que pode resolver pra você! 😉". É PROIBIDO inventar produtos.
+3.  **Consultar o Estoque com a Categoria Correta (Contexto Fornecido):** Agora, analise os produtos fornecidos no "Contexto da busca no Firebase". Verifique se algum dos itens encontrados pertence à **categoria de produto** que você identificou no passo 2. A busca em código já foi feita com as palavras do cliente, sua tarefa é filtrar e validar os resultados com base na sua interpretação.
 
+4.  **Formular a Resposta:**
+    * **SE ENCONTRAR PRODUTOS DA CATEGORIA CORRETA:**
+        * Apresente a solução com confiança, como se você soubesse exatamente o que o cliente queria desde o início. O "Nome do Produto" vem com um código de 6 dígitos no início; remova-o ao apresentar.
+        * **Exemplo:** Cliente diz "câmera pro computador". Você identifica a necessidade "webcam", encontra webcams no contexto e responde: "Entendi perfeitamente, Leo! Para usar no computador, você precisa de uma webcam. Encontrei algumas opções excelentes para você! Temos a *Webcam Logitech C270* (Cód: 900821) por *R$ 245,00*, que é ótima para o dia a dia. Te interessa?".
+    * **SE A BUSCA INICIAL FOI AMBÍGUA (Ex: "adaptador usb"):**
+        * Apresente o resultado mais provável, mas **pergunte para confirmar a necessidade**.
+        * **Exemplo:** "Claro, Leo! Tenho alguns tipos de adaptadores. O mais comum é o *Hub USB para computador* (Cód: 102298). Ele serve para aumentar as portas do seu PC. Era isso que você queria, ou você precisava de algo para conectar no celular?".
+    * **SE NÃO ENCONTRAR NADA RELEVANTE NO ESTOQUE:**
+        * Seja honesto, mas mostre que entendeu o problema e ofereça ajuda para encontrar uma alternativa.
+        * **Exemplo:** "Entendi, Leo. Você está procurando um adaptador para usar a GoPro. Infelizmente, um suporte específico para GoPro não encontrei em nosso sistema. Mas me diga, você precisa prendê-la em um capacete, no peito, ou em um guidão? Sabendo o uso, posso ver se algum outro tipo de suporte que temos aqui pode servir.".
+    * **SE O CLIENTE REFINAR A BUSCA ("tem mais barato?"):**
+         * Analise o histórico da conversa e o contexto de produtos já encontrados. Encontre a opção de menor "Preço Normal" e apresente-a. Se a mais barata já foi oferecida, informe isso.
+         * **Exemplo:** "Sim! Dentre as opções de webcam, a mais em conta é a *Webcam Multilaser 2.0* (Cód: 906940) por *R$ 55,00*.".
 
-    * **ETAPA 2: FORNECENDO DETALHES**
-        * Se sua última mensagem foi a confirmação da ETAPA 1 e o cliente agora pede mais detalhes (ex: "claro, como ele funciona", "fale mais"), você DEVE usar seu conhecimento geral para descrever o *tipo* de produto que você acabou de mencionar na ETAPA 1.
-        * **IMPORTANTE:** Lembre-se do nome do produto que você mencionou. Ao descrever, use o nome limpo (sem o código). Deixe claro que é uma explicação geral. Não invente características específicas que não estão no banco de dados.
-        * **Exemplo de resposta para detalhes:** "Claro! Um abridor de vinhos elétrico como esse é super prático. Geralmente, você o posiciona sobre a garrafa, aperta um botão e ele remove a rolha automaticamente em segundos, sem esforço. É uma ótima pedida para quem gosta de conveniência!".
+**REGRAS GERAIS:**
+* Sua única fonte de produtos é o Firebase. Não invente.
+* Use a memória da conversa para entender perguntas de refinamento.
+* Ao apresentar o produto, remova o código de 6 dígitos do início do nome e use-o no campo (Cód: ...).`;
 
-**RESUMO:** Seja um vendedor inteligente que interpreta o que o cliente quer. Confirme o produto no Firebase. Se o cliente pedir, explique o produto de forma geral. Se não tiver no estoque, seja um humano prestativo e tente ajudar a encontrar uma solução.`;
-
-            // 1. Buscar produtos no Firebase
             const products = await searchProducts(userInput);
             let context = "Contexto da busca no Firebase:\n";
             if (products.length > 0) {
@@ -194,17 +199,16 @@
             } else {
                 context += "Nenhum produto correspondente foi encontrado em nosso estoque para a busca do cliente.\n";
             }
-
-            // 2. Montar o histórico da conversa com o contexto
+            
             const historyWithContext = [
                 ...conversationHistory,
-                { role: "user", parts: [{ text: `INSTRUÇÃO DE CONTEXTO: Use os dados abaixo para responder. Lembre-se, se a lista estiver vazia, siga o fluxo de conversa apropriado.\n\n${context}\n\nPERGUNTA DO CLIENTE: "${userInput}"` }] }
+                { role: "user", parts: [{ text: `Baseado no histórico da nossa conversa e nos resultados da busca de estoque abaixo, responda à minha última mensagem: "${userInput}"\n\n--- Início do Contexto do Estoque ---\n${context}\n--- Fim do Contexto do Estoque ---` }] }
             ];
 
             const payload = {
                 contents: historyWithContext,
                 systemInstruction: { parts: [{ text: systemPrompt }] },
-                generationConfig: { temperature: 0.5 }
+                generationConfig: { temperature: 0.6 }
             };
 
             try {
@@ -214,7 +218,7 @@
                 const candidate = result.candidates?.[0];
                 if (candidate && candidate.content?.parts?.[0]?.text) {
                     const aiText = candidate.content.parts[0].text;
-                    conversationHistory.push({ role: "user", parts: [{ text: userInput }] }); // Adiciona a pergunta original ao histórico
+                    conversationHistory.push({ role: "user", parts: [{ text: userInput }] });
                     conversationHistory.push({ role: "model", parts: [{ text: aiText }] });
                     return aiText;
                 } else {
