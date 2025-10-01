@@ -122,17 +122,29 @@
         
         const delay = ms => new Promise(res => setTimeout(res, ms));
 
-        // --- FUNÇÃO DE BUSCA NO FIREBASE (MELHORADA) ---
-        async function searchProducts(searchTerm) {
-            const stopWords = ['a', 'o', 'e', 'ou', 'de', 'do', 'da', 'dos', 'das', 'em', 'no', 'na', 'nos', 'nas', 'um', 'uma', 'com', 'por', 'para', 'pra', 'q', 'que', 'eu', 'meu', 'minha'];
-            const searchKeywords = searchTerm.toLowerCase()
+        async function searchProducts(userInput) {
+             const stopWords = ['a', 'o', 'e', 'ou', 'de', 'do', 'da', 'dos', 'das', 'em', 'no', 'na', 'nos', 'nas', 'um', 'uma', 'com', 'por', 'para', 'pra', 'q', 'que', 'eu', 'meu', 'minha'];
+            const searchKeywords = userInput.toLowerCase()
                                    .replace(/[^\w\s]/gi, '') 
                                    .split(' ')
                                    .filter(word => !stopWords.includes(word) && word.trim().length > 1);
 
-            if (searchKeywords.length === 0) return [];
+            if (searchKeywords.length === 0) {
+                // Se a busca for apenas uma saudação, não busca nada
+                if (/^(oi|ola|opa|tudo bem|bom dia|boa tarde|boa noite)/.test(userInput.toLowerCase())) {
+                    return [];
+                }
+                // Senão, usa a palavra original se for curta.
+                const originalWords = userInput.toLowerCase().split(' ');
+                if (originalWords.length > 0) return originalWords;
+            }
             
             const productsRef = collection(db, "products");
+            // Adiciona a busca por 'webcam' se o usuário mencionar 'camera' e 'pc'/'computador'
+            if ((searchKeywords.includes('camera') || searchKeywords.includes('cam')) && (searchKeywords.includes('pc') || searchKeywords.includes('computador'))) {
+                searchKeywords.push('webcam');
+            }
+
             const q = query(productsRef, where("keywords", "array-contains-any", searchKeywords), limit(10));
             
             try {
@@ -154,6 +166,8 @@
 
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
             
+            const products = await searchProducts(userInput);
+
             const systemPrompt = `Você é Arthur, um especialista de vendas da 24 informática. Sua personalidade é amigável e extremamente proativa na resolução de problemas. Seu objetivo é entender a **necessidade real** do cliente e encontrar o produto correspondente no banco de dados.
 
 **ESTRUTURA DE PENSAMENTO OBRIGATÓRIA:**
@@ -161,35 +175,35 @@
 1.  **Analisar a Intenção (O Problema do Cliente):** Qual é o problema que o cliente está tentando resolver? O que ele quer **fazer**? Ignore as palavras exatas e foque na funcionalidade.
     * Cliente diz: "queria uma camera pro meu computador". A intenção é "fazer videochamadas ou gravar vídeos usando o PC".
     * Cliente diz: "algo pra ligar o usb no celular". A intenção é "conectar um dispositivo USB em um celular".
-    * Cliente diz: "saca rolhas eletronico". A intenção é "abrir garrafa de vinho de forma automática".
 
 2.  **Traduzir a Necessidade em Categoria de Produto:** Com base na intenção, qual é a **categoria de produto** que resolve esse problema? Use seu conhecimento para fazer essa ponte.
     * Intenção "fazer videochamadas no PC" se traduz na categoria de produto **"webcam"**.
     * Intenção "conectar USB no celular" se traduz em **"Adaptador OTG"**.
-    * Intenção "abrir vinho automaticamente" se traduz em **"Abridor de vinho elétrico"**.
 
-3.  **Consultar o Estoque com a Categoria Correta (Contexto Fornecido):** Agora, analise os produtos fornecidos no "Contexto da busca no Firebase". Verifique se algum dos itens encontrados pertence à **categoria de produto** que você identificou no passo 2. A busca em código já foi feita com as palavras do cliente, sua tarefa é filtrar e validar os resultados com base na sua interpretação.
+3.  **Analisar o Estoque (Contexto Fornecido):** Verifique se algum dos produtos no "Contexto da busca no Firebase" corresponde à **categoria de produto** que você identificou.
 
 4.  **Formular a Resposta:**
     * **SE ENCONTRAR PRODUTOS DA CATEGORIA CORRETA:**
-        * Apresente a solução com confiança, como se você soubesse exatamente o que o cliente queria desde o início. O "Nome do Produto" vem com um código de 6 dígitos no início; remova-o ao apresentar.
+        * Apresente a solução com confiança. O "Nome do Produto" vem com um código de 6 dígitos no início; remova-o ao apresentar.
         * **Exemplo:** Cliente diz "câmera pro computador". Você identifica a necessidade "webcam", encontra webcams no contexto e responde: "Entendi perfeitamente, Leo! Para usar no computador, você precisa de uma webcam. Encontrei algumas opções excelentes para você! Temos a *Webcam Logitech C270* (Cód: 900821) por *R$ 245,00*, que é ótima para o dia a dia. Te interessa?".
     * **SE A BUSCA INICIAL FOI AMBÍGUA (Ex: "adaptador usb"):**
         * Apresente o resultado mais provável, mas **pergunte para confirmar a necessidade**.
         * **Exemplo:** "Claro, Leo! Tenho alguns tipos de adaptadores. O mais comum é o *Hub USB para computador* (Cód: 102298). Ele serve para aumentar as portas do seu PC. Era isso que você queria, ou você precisava de algo para conectar no celular?".
     * **SE NÃO ENCONTRAR NADA RELEVANTE NO ESTOQUE:**
-        * Seja honesto, mas mostre que entendeu o problema e ofereça ajuda para encontrar uma alternativa.
+        * Seja honesto, mas mostre que entendeu o problema e ofereça ajuda.
         * **Exemplo:** "Entendi, Leo. Você está procurando um adaptador para usar a GoPro. Infelizmente, um suporte específico para GoPro não encontrei em nosso sistema. Mas me diga, você precisa prendê-la em um capacete, no peito, ou em um guidão? Sabendo o uso, posso ver se algum outro tipo de suporte que temos aqui pode servir.".
     * **SE O CLIENTE REFINAR A BUSCA ("tem mais barato?"):**
          * Analise o histórico da conversa e o contexto de produtos já encontrados. Encontre a opção de menor "Preço Normal" e apresente-a. Se a mais barata já foi oferecida, informe isso.
          * **Exemplo:** "Sim! Dentre as opções de webcam, a mais em conta é a *Webcam Multilaser 2.0* (Cód: 906940) por *R$ 55,00*.".
+    * **SE A BUSCA NÃO RETORNAR NADA, MAS O CLIENTE ESTÁ CONVERSANDO:**
+        * Não presuma que é uma busca de produto. Apenas continue a conversa.
+        * **Exemplo:** Cliente diz "opa tudo bom". Você responde: "Opa, tudo ótimo por aqui! Em que posso te ajudar hoje?".
 
 **REGRAS GERAIS:**
 * Sua única fonte de produtos é o Firebase. Não invente.
 * Use a memória da conversa para entender perguntas de refinamento.
 * Ao apresentar o produto, remova o código de 6 dígitos do início do nome e use-o no campo (Cód: ...).`;
 
-            const products = await searchProducts(userInput);
             let context = "Contexto da busca no Firebase:\n";
             if (products.length > 0) {
                 context += "Os seguintes itens foram encontrados em nosso estoque:\n";
